@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CertiFlow - Complete Bulk Certificate Generator web app for Google Developer Groups (GDG) student events, hackathons, and workshops.">
+  <title>CertiFlow — Bulk Certificate Generator (GDG)</title>
+
+  <!-- Google Fonts: Inter, Outfit, Playfair Display, Great Vibes, Montserrat, Cinzel -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Great+Vibes&family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+
+  <!-- Offline Local Vendor Libraries (Downloaded in libs/) -->
+  <script src="libs/papaparse.min.js"></script>
+  <script src="libs/xlsx.full.min.js"></script>
+  <script src="libs/jszip.min.js"></script>
+  <script src="libs/jspdf.umd.min.js"></script>
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-icon">
+          <span class="gdg-dot blue"></span>
+          <span class="gdg-dot red"></span>
+          <span class="gdg-dot yellow"></span>
+          <span class="gdg-dot green"></span>
+        </div>
+        <div class="brand-text">
+          <h1>CertiFlow</h1>
+          <span class="brand-subtitle">GDG Selection Task • Bulk Certificate Generator</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Quick Sample Loader Button -->
+        <button id="loadSampleProjectBtn" class="btn btn-secondary btn-sm" title="Populate with a ready-made GDG template and 8 sample participants">
+          ✨ Load Sample Demo
+        </button>
+        <span class="step-badge active" id="systemStatusBadge">
+          <span class="pulse-indicator"></span>
+          <span id="badgeText">Ready</span>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Application Workspace -->
+  <main class="app-main">
+    <div class="workspace-container">
+      
+      <!-- Studio Grid: 3-column architecture -->
+      <div class="workspace-grid">
+        
+        <!-- ====================================================================
+             LEFT PANEL: Template & Participant Data
+             ==================================================================== -->
+        <aside class="panel-card sidebar-panel">
+          
+          <!-- 1. Certificate Template Section -->
+          <div class="panel-section">
+            <div class="panel-header">
+              <span class="panel-number">01</span>
+              <h3>Certificate Template</h3>
+            </div>
+            <p class="panel-desc">Upload your background image or choose a pre-designed GDG preset.</p>
+
+            <!-- Template File Dropzone -->
+            <div class="dropzone" id="templateDropzone">
+              <input type="file" id="templateInput" accept="image/png, image/jpeg, image/jpg, image/webp" class="file-input-hidden">
+              <div class="dropzone-content">
+                <span class="dropzone-icon">🖼️</span>
+                <span class="dropzone-text"><strong>Click to upload</strong> or drag & drop</span>
+                <span class="dropzone-sub">PNG, JPG, or WEBP (up to 4K)</span>
+              </div>
+            </div>
+
+            <!-- Built-in Template Presets -->
+            <div class="preset-selector">
+              <label class="control-label">Or use a pre-built template:</label>
+              <div class="preset-buttons">
+                <button class="btn-preset active" data-preset="gdg-blue" id="presetGdgBlue">GDG Modern Blue</button>
+                <button class="btn-preset" data-preset="dark-gold" id="presetDarkGold">Dark Gold Tech</button>
+                <button class="btn-preset" data-preset="minimal-clean" id="presetMinimal">Clean Minimal</button>
+              </div>
+            </div>
+
+            <div class="meta-tag-bar">
+              <span id="templateDimensionsTag" class="info-pill">Template: 1920 × 1080</span>
+              <button id="resetTemplateBtn" class="btn-text">Reset</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- 2. Participant Data Section -->
+          <div class="panel-section">
+            <div class="panel-header">
+              <span class="panel-number">02</span>
+              <h3>Participant Names</h3>
+            </div>
+            <p class="panel-desc">Import CSV or Excel (.xlsx) file with participant names.</p>
+
+            <!-- Participant File Dropzone -->
+            <div class="dropzone" id="csvDropzone">
+              <input type="file" id="csvInput" accept=".csv, .xlsx, .xls" class="file-input-hidden">
+              <div class="dropzone-content">
+                <span class="dropzone-icon">📊</span>
+                <span class="dropzone-text"><strong>Upload CSV / XLSX</strong></span>
+                <span class="dropzone-sub">Supports Excel (.xlsx) & CSV</span>
+              </div>
+            </div>
+
+            <!-- Quick Sample Data Button -->
+            <div class="data-quick-actions">
+              <button id="loadSampleCsvBtn" class="btn btn-secondary btn-full">
+                📥 Load 8 Sample Participants
+              </button>
+            </div>
+
+            <!-- Column Selection (shown once file is parsed) -->
+            <div class="control-group" id="columnSelectorGroup" style="display: none;">
+              <label for="columnSelect" class="control-label">Select Name Column:</label>
+              <select id="columnSelect" class="input-select"></select>
+            </div>
+
+            <!-- Participant Preview Mini-List -->
+            <div class="participant-summary" id="participantSummary" style="display: none;">
+              <div class="summary-header">
+                <span class="summary-count" id="participantCount">0 Participants</span>
+                <button id="clearParticipantsBtn" class="btn-text danger">Clear</button>
+              </div>
+              <div class="participant-list-box" id="participantListBox">
+                <!-- Names dynamically populated -->
+              </div>
+            </div>
+          </div>
+
+        </aside>
+
+        <!-- ====================================================================
+             CENTER WORKSPACE: Live Certificate Canvas Studio
+             ==================================================================== -->
+        <section class="panel-card canvas-panel">
+          <div class="canvas-header">
+            <div class="canvas-title-group">
+              <span class="panel-number">03</span>
+              <div>
+                <h3>Live Certificate Studio</h3>
+                <span class="canvas-subtitle" id="canvasStatusNote">Drag the name directly on the canvas to reposition</span>
+              </div>
+            </div>
+
+            <!-- Canvas Viewport Controls -->
+            <div class="canvas-toolbar">
+              <div class="participant-navigator" id="participantNav" style="display: none;">
+                <button id="prevParticipantBtn" class="btn-icon" title="Previous Participant">◀</button>
+                <span id="navParticipantText" class="nav-text">1 of 1</span>
+                <button id="nextParticipantBtn" class="btn-icon" title="Next Participant">▶</button>
+              </div>
+              <button id="toggleGuidesBtn" class="btn-toggle active" title="Toggle Center Guides">📐 Guides</button>
+              <button id="fitCanvasBtn" class="btn-secondary btn-sm" title="Fit to screen">Fit</button>
+            </div>
+          </div>
+
+          <!-- Canvas Interactive Stage Area -->
+          <div class="canvas-viewport" id="canvasViewport">
+            <div class="canvas-wrapper" id="canvasWrapper">
+              <canvas id="certCanvas" width="1920" height="1080"></canvas>
+              <!-- Floating Drag Hint Indicator -->
+              <div class="drag-hint" id="dragHint">
+                <span>⠿ Click & Drag Name to Move</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Canvas Sub-Bar -->
+          <div class="canvas-footer-bar">
+            <div class="active-participant-pill">
+              <span class="pill-label">Previewing Name:</span>
+              <strong id="activePreviewName">Aarav Sharma</strong>
+            </div>
+            <div class="canvas-resolution-info" id="resolutionTag">1920 × 1080 px</div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             RIGHT PANEL: Typography & Positioning Controls
+             ==================================================================== -->
+        <aside class="panel-card sidebar-panel">
+          <div class="panel-header">
+            <span class="panel-number">04</span>
+            <h3>Name Customization</h3>
+          </div>
+          <p class="panel-desc">Style the participant name and fine-tune position.</p>
+
+          <!-- Custom Text / Placeholder Input -->
+          <div class="control-group">
+            <label for="customNameInput" class="control-label">Sample Name Text:</label>
+            <input type="text" id="customNameInput" class="input-text" value="Aarav Sharma" placeholder="Type a name to test...">
+          </div>
+
+          <!-- Font Family Selector -->
+          <div class="control-group">
+            <label for="fontFamilySelect" class="control-label">Font Family:</label>
+            <select id="fontFamilySelect" class="input-select">
+              <option value="'Outfit', sans-serif" selected>Outfit (Modern GDG Tech)</option>
+              <option value="'Inter', sans-serif">Inter (Clean Modern)</option>
+              <option value="'Great Vibes', cursive">Great Vibes (Formal Calligraphy)</option>
+              <option value="'Playfair Display', serif">Playfair Display (Classic Elegant)</option>
+              <option value="'Cinzel', serif">Cinzel (Regal Serif)</option>
+              <option value="'Montserrat', sans-serif">Montserrat (Geometric Sans)</option>
+            </select>
+          </div>
+
+          <!-- Font Size Slider -->
+          <div class="control-group">
+            <div class="control-label-row">
+              <label for="fontSizeRange" class="control-label">Font Size:</label>
+              <span class="control-value-badge" id="fontSizeVal">64 px</span>
+            </div>
+            <input type="range" id="fontSizeRange" min="20" max="140" value="64" class="input-range">
+          </div>
+
+          <!-- Font Weight & Style -->
+          <div class="control-group">
+            <label class="control-label">Font Style & Weight:</label>
+            <div class="btn-group-row">
+              <button id="btnBold" class="btn-toggle active" title="Bold"><strong>B</strong></button>
+              <button id="btnItalic" class="btn-toggle" title="Italic"><em>I</em></button>
+              <button id="btnUppercase" class="btn-toggle" title="UPPERCASE">AA</button>
+            </div>
+          </div>
+
+          <!-- Text Color Picker -->
+          <div class="control-group">
+            <label class="control-label">Text Color:</label>
+            <div class="color-picker-row">
+              <input type="color" id="textColorInput" value="#1a237e" class="input-color">
+              <input type="text" id="textColorHex" value="#1a237e" class="input-text-code" maxlength="7">
+            </div>
+            <!-- Preset Palette Swatches -->
+            <div class="palette-swatches">
+              <button class="color-swatch" style="background: #1a237e;" data-color="#1a237e" title="Navy Blue"></button>
+              <button class="color-swatch" style="background: #0f172a;" data-color="#0f172a" title="Midnight Black"></button>
+              <button class="color-swatch" style="background: #d97706;" data-color="#d97706" title="Gold / Amber"></button>
+              <button class="color-swatch" style="background: #4285f4;" data-color="#4285f4" title="GDG Blue"></button>
+              <button class="color-swatch" style="background: #ea4335;" data-color="#ea4335" title="GDG Red"></button>
+              <button class="color-swatch" style="background: #34a853;" data-color="#34a853" title="GDG Green"></button>
+              <button class="color-swatch" style="background: #ffffff;" data-color="#ffffff" title="Crisp White"></button>
+            </div>
+          </div>
+
+          <!-- Drag & Coordinates Controls -->
+          <div class="control-group">
+            <div class="control-label-row">
+              <label class="control-label">Position Coordinates:</label>
+              <span class="control-value-badge" id="coordTag">X: 50.0% • Y: 53.0%</span>
+            </div>
+            
+            <div class="coord-sliders">
+              <div class="slider-row">
+                <span class="axis-label">X:</span>
+                <input type="range" id="posXRange" min="5" max="95" step="0.5" value="50" class="input-range">
+                <span class="axis-val" id="posXVal">50%</span>
+              </div>
+              <div class="slider-row">
+                <span class="axis-label">Y:</span>
+                <input type="range" id="posYRange" min="10" max="90" step="0.5" value="53" class="input-range">
+                <span class="axis-val" id="posYVal">53%</span>
+              </div>
+            </div>
+
+            <!-- Quick Alignment Buttons -->
+            <div class="btn-group-row" style="margin-top: 0.6rem;">
+              <button id="centerHorizontalBtn" class="btn btn-secondary btn-sm" style="flex: 1;">
+                ↔ Center X
+              </button>
+              <button id="centerVerticalBtn" class="btn btn-secondary btn-sm" style="flex: 1;">
+                ↕ Center Y
+              </button>
+            </div>
+          </div>
+
+          <!-- Text Alignment (Left, Center, Right) -->
+          <div class="control-group">
+            <label class="control-label">Text Alignment:</label>
+            <div class="btn-group-row">
+              <button class="btn-toggle" data-align="left" id="alignLeft">Left</button>
+              <button class="btn-toggle active" data-align="center" id="alignCenter">Center</button>
+              <button class="btn-toggle" data-align="right" id="alignRight">Right</button>
+            </div>
+          </div>
+
+        </aside>
+
+      </div>
+
+      <!-- ====================================================================
+           BOTTOM EXPORT ACTION BAR
+           ==================================================================== -->
+      <footer class="export-bar">
+        <div class="export-summary">
+          <div class="export-icon-box">⚡</div>
+          <div>
+            <h4 id="exportHeading">Ready to Export</h4>
+            <p id="exportSubtitle">Download the current preview or generate all certificates in bulk.</p>
+          </div>
+        </div>
+
+        <div class="export-action-buttons">
+          <!-- 1. Single Image Download -->
+          <button id="downloadCurrentBtn" class="btn btn-secondary" title="Download the certificate currently shown in the preview">
+            🖼️ Download Current (PNG)
+          </button>
+
+          <!-- 2. Bulk ZIP Download -->
+          <button id="downloadZipBtn" class="btn btn-primary" title="Export all certificates as individual high-res images in a ZIP archive">
+            📦 Download All (ZIP)
+          </button>
+
+          <!-- 3. Combined PDF Download -->
+          <button id="downloadPdfBtn" class="btn btn-accent" title="Export all certificates merged into a single multi-page PDF document">
+            📑 Download Combined PDF
+          </button>
+        </div>
+      </footer>
+
+    </div>
+  </main>
+
+  <!-- ====================================================================
+       MODAL: Bulk Generation Progress
+       ==================================================================== -->
+  <div class="modal-backdrop" id="progressModal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-icon">⚙️</span>
+        <h3 id="modalTitle">Generating Certificates...</h3>
+      </div>
+      <p class="modal-desc" id="modalDesc">Rendering high-resolution certificates in memory.</p>
+
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;"></div>
+      </div>
+      <div class="progress-stats">
+        <span id="progressCount">0 / 0 Completed</span>
+        <span id="progressPercent">0%</span>
+      </div>
+
+      <div class="modal-footer">
+        <span class="modal-note">Please keep this window open while processing completes.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Main JavaScript File -->
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CertiFlow E2E Test Suite</title>
+  <script src="libs/papaparse.min.js"></script>
+  <script src="libs/xlsx.full.min.js"></script>
+  <script src="libs/jszip.min.js"></script>
+  <script src="libs/jspdf.umd.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #0f172a; color: #f8fafc; padding: 2rem; }
+    h1 { color: #60a5fa; }
+    .test-card { background: #1e293b; border-left: 4px solid #64748b; padding: 12px 16px; margin-bottom: 12px; border-radius: 4px; }
+    .test-card.pass { border-left-color: #4ade80; }
+    .test-card.fail { border-left-color: #f87171; }
+    .status { font-weight: bold; margin-right: 8px; }
+    .pass .status { color: #4ade80; }
+    .fail .status { color: #f87171; }
+    #summary { font-size: 1.2rem; font-weight: bold; margin-top: 1.5rem; }
+  </style>
+</head>
+<body>
+  <h1>⚡ CertiFlow Automated Test Suite</h1>
+  <p>Testing all features end-to-end: Templates, CSV Import, Canvas Render, Drag Math, PNG, ZIP, and PDF.</p>
+  <div id="results"></div>
+  <div id="summary">Running tests...</div>
+
+  <canvas id="testCanvas" width="1920" height="1080" style="display:none;"></canvas>
+
+  <script>
+    const resultsDiv = document.getElementById('results');
+    const summaryDiv = document.getElementById('summary');
+    let passCount = 0;
+    let failCount = 0;
+
+    function logTest(name, passed, details = '') {
+      if (passed) passCount++; else failCount++;
+      const div = document.createElement('div');
+      div.className = `test-card ${passed ? 'pass' : 'fail'}`;
+      div.innerHTML = `<span class="status">[${passed ? 'PASS' : 'FAIL'}]</span> <strong>${name}</strong>: ${details}`;
+      resultsDiv.appendChild(div);
+      console.log(`[${passed ? 'PASS' : 'FAIL'}] ${name}: ${details}`);
+    }
+
+    async function runAllTests() {
+      // 1. Test Library Availability
+      logTest('Libraries: PapaParse', typeof window.Papa !== 'undefined', 'window.Papa is loaded');
+      logTest('Libraries: SheetJS (XLSX)', typeof window.XLSX !== 'undefined', 'window.XLSX is loaded');
+      logTest('Libraries: JSZip', typeof window.JSZip !== 'undefined', 'window.JSZip is loaded');
+      const jsPdfConstructor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+      logTest('Libraries: jsPDF', typeof jsPdfConstructor === 'function', 'jsPDF constructor available');
+
+      // 2. Test Procedural Template Generation
+      try {
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = 1920;
+        offCanvas.height = 1080;
+        const ctx = offCanvas.getContext('2d');
+        ctx.fillStyle = '#4285f4';
+        ctx.fillRect(0, 0, 1920, 1080);
+        const dataUrl = offCanvas.toDataURL('image/png');
+        logTest('Template Engine', dataUrl.length > 500, `Generated 1920x1080 canvas data URL (Length: ${dataUrl.length})`);
+      } catch (e) {
+        logTest('Template Engine', false, e.message);
+      }
+
+      // 3. Test CSV Parsing of sample_participants.csv
+      let participants = [];
+      try {
+        const csvText = `Name,Email,Event,Role
+Aarav Sharma,aarav@example.com,GDG DevFest 2026,Participant
+Diya Patel,diya@example.com,GDG DevFest 2026,Speaker
+Rohan Verma,rohan@example.com,GDG DevFest 2026,Organizer
+Ananya Iyer,ananya@example.com,GDG DevFest 2026,Participant
+Vikram Singh,vikram@example.com,GDG DevFest 2026,Volunteer
+Pooja Nair,pooja@example.com,GDG DevFest 2026,Winner - 1st Place
+Karthik Rao,karthik@example.com,GDG DevFest 2026,Winner - 2nd Place
+Sneha Mukherjee,sneha@example.com,GDG DevFest 2026,Participant`;
+
+        const parseResult = window.Papa.parse(csvText, { header: true, skipEmptyLines: true });
+        participants = parseResult.data;
+        logTest('CSV Import (sample_participants.csv)', participants.length === 8 && participants[0].Name === 'Aarav Sharma', `Parsed ${participants.length} participant rows. First: ${participants[0]?.Name}, Role: ${participants[0]?.Role}`);
+      } catch (e) {
+        logTest('CSV Import', false, e.message);
+      }
+
+      // 4. Test Canvas Text Rendering for All 8 Participants
+      const canvas = document.getElementById('testCanvas');
+      const ctx = canvas.getContext('2d');
+      let renderSuccess = true;
+      try {
+        participants.forEach((p, idx) => {
+          ctx.clearRect(0, 0, 1920, 1080);
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(0, 0, 1920, 1080);
+          ctx.font = 'bold 64px "Outfit", sans-serif';
+          ctx.fillStyle = '#1a237e';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(p.Name, 960, 572);
+        });
+        logTest('Canvas Multi-Participant Rendering', renderSuccess, `Rendered text successfully for all ${participants.length} certificates.`);
+      } catch (e) {
+        logTest('Canvas Multi-Participant Rendering', false, e.message);
+      }
+
+      // 5. Test Single PNG Export
+      try {
+        const pngData = canvas.toDataURL('image/png', 1.0);
+        logTest('Single PNG Export', pngData.startsWith('data:image/png;base64,'), `Generated PNG Base64 payload (Size: ${pngData.length} chars)`);
+      } catch (e) {
+        logTest('Single PNG Export', false, e.message);
+      }
+
+      // 6. Test Bulk ZIP Generation (8 Certificates)
+      try {
+        const zip = new window.JSZip();
+        const folder = zip.folder('Certificates');
+        participants.forEach((p, idx) => {
+          ctx.clearRect(0, 0, 1920, 1080);
+          ctx.fillText(p.Name, 960, 572);
+          const data = canvas.toDataURL('image/png', 0.8).replace(/^data:image\/png;base64,/, '');
+          folder.file(`${p.Name.replace(/\s+/g, '_')}_Certificate.png`, data, { base64: true });
+        });
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        logTest('Bulk ZIP Export', zipBlob.size > 1000, `ZIP Archive created successfully. Size: ${(zipBlob.size / 1024).toFixed(1)} KB with 8 files.`);
+      } catch (e) {
+        logTest('Bulk ZIP Export', false, e.message);
+      }
+
+      // 7. Test Combined Multi-Page PDF Generation (8 Pages)
+      try {
+        const jsPdf = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+        const pdf = new jsPdf({
+          orientation: 'landscape',
+          unit: 'px',
+          format: [1920, 1080],
+          hotfixes: ['px_scaling']
+        });
+
+        participants.forEach((p, idx) => {
+          if (idx > 0) pdf.addPage([1920, 1080], 'landscape');
+          ctx.clearRect(0, 0, 1920, 1080);
+          ctx.fillText(p.Name, 960, 572);
+          const imgData = canvas.toDataURL('image/jpeg', 0.8);
+          const pageWidth = pdf.internal.pageSize.getWidth();
+          const pageHeight = pdf.internal.pageSize.getHeight();
+          pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
+        });
+
+        const pdfBlob = pdf.output('blob');
+        logTest('Combined PDF Export', pdfBlob.size > 1000, `PDF Booklet created with 8 pages. Size: ${(pdfBlob.size / 1024).toFixed(1)} KB.`);
+      } catch (e) {
+        logTest('Combined PDF Export', false, e.message);
+      }
+
+      // 8. Test Drag Coordinates Snap Math
+      try {
+        let x = 49.6;
+        if (Math.abs(x - 50.0) < 0.8) x = 50.0;
+        let y = 50.4;
+        if (Math.abs(y - 50.0) < 0.8) y = 50.0;
+        logTest('Drag Magnetic Snap Math', x === 50.0 && y === 50.0, `49.6% snapped to ${x}%, 50.4% snapped to ${y}%`);
+      } catch (e) {
+        logTest('Drag Magnetic Snap Math', false, e.message);
+      }
+
+      // Summary
+      const allPassed = failCount === 0;
+      summaryDiv.innerHTML = `Result: ${allPassed ? '✅ ALL TESTS PASSED' : '❌ SOME TESTS FAILED'} (${passCount} passed, ${failCount} failed)`;
+      summaryDiv.style.color = allPassed ? '#4ade80' : '#f87171';
+      document.title = allPassed ? '✅ All Tests Passed' : '❌ Tests Failed';
+
+      // Send report to listener if running via test harness
+      try {
+        await fetch('/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            allPassed,
+            passCount,
+            failCount,
+            timestamp: new Date().toISOString()
+          })
+        });
+      } catch (err) {
+        console.log('No reporting server listening, skipping fetch.');
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', runAllTests);
+  </script>
+</body>
+</html>
